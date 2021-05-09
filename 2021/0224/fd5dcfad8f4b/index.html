@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.3.0">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon-next.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-326.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16.png">
+  <link rel="mask-icon" href="/images/logo.svg" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="/lib/pace/pace-theme-material.min.css">
+  <script src="/lib/pace/pace.min.js"></script>
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"zero-rock.github.io","root":"/","scheme":"Muse","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":"flat"},"back2top":{"enable":true,"sidebar":false,"scrollpercent":true},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":false,"mediumzoom":false,"lazyload":true,"pangu":false,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":false,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":false,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}}};
+  </script>
+
+  <meta name="description" content="众所周知，Python 是一门面向对象语言，在 Python 的世界一切皆对象。所以一切变量的本质都是对象的一个指针而已。 Python 运行过程中会不停的创建各种变量，而这些变量是需要存储在内存中的，随着程序的不断运行，变量数量越来越多，所占用的空间势必越来越大，如果对变量所占用的内存空间管理不当的话，那么肯定会出现 out of memory。程序大概率会被异常终止。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Python Garbage Collection">
+<meta property="og:url" content="http://zero-rock.github.io/2021/0224/fd5dcfad8f4b/index.html">
+<meta property="og:site_name" content="Zero | 含光の博客">
+<meta property="og:description" content="众所周知，Python 是一门面向对象语言，在 Python 的世界一切皆对象。所以一切变量的本质都是对象的一个指针而已。 Python 运行过程中会不停的创建各种变量，而这些变量是需要存储在内存中的，随着程序的不断运行，变量数量越来越多，所占用的空间势必越来越大，如果对变量所占用的内存空间管理不当的话，那么肯定会出现 out of memory。程序大概率会被异常终止。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2021-02-24T06:25:34.000Z">
+<meta property="article:modified_time" content="2021-03-15T11:02:02.960Z">
+<meta property="article:author" content="Zero">
+<meta property="article:tag" content="Python">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="http://zero-rock.github.io/2021/0224/fd5dcfad8f4b/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Python Garbage Collection | Zero | 含光の博客</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">Zero | 含光の博客</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">子曰:「IF IT AIN’T BROKE, DON’T FIX IT」</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+  </ul>
+</nav>
+
+
+
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+  <div class="reading-progress-bar"></div>
+
+  <a href="https://github.com/Zero-Rock" class="github-corner" title="Follow me on GitHub" aria-label="Follow me on GitHub" rel="noopener" target="_blank"><svg width="80" height="80" viewBox="0 0 250 250" aria-hidden="true"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="http://zero-rock.github.io/2021/0224/fd5dcfad8f4b/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/images/avatar.jpg">
+      <meta itemprop="name" content="Zero">
+      <meta itemprop="description" content="IF IT AIN’T BROKE, DON’T FIX IT">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="Zero | 含光の博客">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Python Garbage Collection
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2021-02-24 14:25:34" itemprop="dateCreated datePublished" datetime="2021-02-24T14:25:34+08:00">2021-02-24</time>
+            </span>
+              <span class="post-meta-item">
+                <span class="post-meta-item-icon">
+                  <i class="far fa-calendar-check"></i>
+                </span>
+                <span class="post-meta-item-text">更新于</span>
+                <time title="修改时间：2021-03-15 19:02:02" itemprop="dateModified" datetime="2021-03-15T19:02:02+08:00">2021-03-15</time>
+              </span>
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-folder"></i>
+              </span>
+              <span class="post-meta-item-text">分类于</span>
+                <span itemprop="about" itemscope itemtype="http://schema.org/Thing">
+                  <a href="/categories/%E6%8A%80%E6%9C%AF/" itemprop="url" rel="index"><span itemprop="name">技术</span></a>
+                </span>
+            </span>
+
+          <br>
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+                <span class="post-meta-item-text">本文字数：</span>
+              <span>2.9k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+                <span class="post-meta-item-text">阅读时长 &asymp;</span>
+              <span>3 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>众所周知，Python 是一门面向对象语言，在 Python 的世界一切皆对象。所以一切变量的本质都是对象的一个指针而已。</p>
+<p>Python 运行过程中会不停的创建各种变量，而这些变量是需要存储在内存中的，随着程序的不断运行，变量数量越来越多，所占用的空间势必越来越大，如果对变量所占用的内存空间管理不当的话，那么肯定会出现 out of memory。程序大概率会被异常终止。</p>
+<a id="more"></a>
+
+<p>因此，对于内存空间的有效合理管理变得尤为重要，那么 Python 是怎么解决这个问题的呢。其实很简单，对不不可能再使用到的内存进行回收即可，像 C 语言中需要程序员手动释放内存就是这个道理。但问题是如何确定哪些内存不再会被使用到呢？这就是我们今天要说的垃圾回收了</p>
+<blockquote>
+<p>python 采用的是引用计数机制为主，标记清除和分代收集两种机制为辅的策略</p>
+</blockquote>
+<h3 id="引用计数"><a href="#引用计数" class="headerlink" title="引用计数"></a>引用计数</h3><ul>
+<li>Python 语言默认采用的垃圾收集机制是『引用计数法 Reference Counting』，该算法最早 George E. Collins 在 1960 的时候首次提出，60 年后的今天，该算法依然被很多编程语言使用。</li>
+<li>『引用计数』的原理是：每个对象维护一个<code>ob_ref</code>字段，用来记录该对象当前被引用的次数，每当一个新的引用指向该对象时，它的引用计数<code>ob_ref</code>加1，每当该对象的引用失效时计数<code>ob_ref</code>减1，一旦对象的引用计数为0，该对象立即被回收，对象占用的内存空间将被释放。</li>
+<li>它的缺点是需要额外的空间维护引用计数，这个问题是其次的，不过最主要的问题是它不能解决对象的 “循环引用”，因此，也有很多语言比如 Java 并没有采用该算法做来垃圾的收集机制</li>
+</ul>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">import</span> sys</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="class"><span class="keyword">class</span> <span class="title">Cls</span>():</span></span><br><span class="line">    <span class="function"><span class="keyword">def</span> <span class="title">__init__</span>(<span class="params">self</span>):</span></span><br><span class="line">        print(<span class="string">&#x27;object born id:%s&#x27;</span> % <span class="built_in">str</span>(<span class="built_in">id</span>(self)))</span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">getrefCount</span>(<span class="params">c</span>):</span></span><br><span class="line">    <span class="comment"># getrefCount 方法用于返回对象的引用计数</span></span><br><span class="line">    print(<span class="string">&#x27;object refCount: &#x27;</span>, sys.getrefCount(c)) </span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="keyword">if</span> __name__ == <span class="string">&#x27;__main__&#x27;</span>:</span><br><span class="line">    a = Cls()</span><br><span class="line">    getrefCount(a)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 增加引用</span></span><br><span class="line">    b = a</span><br><span class="line">    getrefCount(a)</span><br><span class="line"></span><br><span class="line">    <span class="comment"># 销毁引用对象b</span></span><br><span class="line">    <span class="keyword">del</span> b</span><br><span class="line">    getrefCount(a)</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<p>执行结果</p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">object born id:4377219920</span><br><span class="line">object refCount:  4</span><br><span class="line">object refCount:  5</span><br><span class="line">object refCount:  4</span><br></pre></td></tr></table></figure>
+<h4 id="导致引用计数-1-的情况"><a href="#导致引用计数-1-的情况" class="headerlink" title="导致引用计数 +1 的情况"></a>导致引用计数 +1 的情况</h4><ul>
+<li>对象被创建，例如 variableA=23</li>
+<li>对象被引用，例如 variableB=variableA</li>
+<li>对象被作为参数，传入到一个函数中，例如func(variableA)</li>
+<li>对象作为一个元素，存储在容器中，例如list1=[variableA,variableA]</li>
+</ul>
+<h4 id="导致引用计数-1-的情况-1"><a href="#导致引用计数-1-的情况-1" class="headerlink" title="导致引用计数-1 的情况"></a>导致引用计数-1 的情况</h4><ul>
+<li>对象的别名被显式销毁，例如del variableA</li>
+<li>对象的别名被赋予新的对象，例如variableA=24</li>
+<li>一个对象离开它的作用域，例如 f 函数执行完毕时，func函数中的局部变量（全局变量不会）</li>
+<li>对象所在的容器被销毁，或从容器中删除对象</li>
+</ul>
+<h4 id="循环引用导致内存泄露"><a href="#循环引用导致内存泄露" class="headerlink" title="循环引用导致内存泄露"></a>循环引用导致内存泄露</h4><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="function"><span class="keyword">def</span> <span class="title">f2</span>():</span></span><br><span class="line">    <span class="string">&#x27;&#x27;&#x27;循环引用&#x27;&#x27;&#x27;</span></span><br><span class="line">    variableC1 = Cls()</span><br><span class="line">    variableC2 = Cls()</span><br><span class="line">    variableC1.t = variableC2</span><br><span class="line">    variableC2.t = variableC1</span><br><span class="line">    <span class="keyword">del</span> variableC1</span><br><span class="line">    <span class="keyword">del</span> variableC2</span><br><span class="line">f2()</span><br></pre></td></tr></table></figure>
+<ul>
+<li>创建了variableC1，variableC2后，这两个对象的引用计数都是1</li>
+<li>执行variableC1.t=variableC2和variableC2.t=variableC1后，引用计数变成2</li>
+<li>在del variableC1后，内存variableC1的对象的引用计数变为1，由于不是为0，所以variableC1的对象不会被销毁,同理，在del variableC2后也是一样的</li>
+<li>虽然它们两个的对象都是可以被销毁的，但是由于循环引用，导致垃圾回收器都不会回收它们，所以就会导致内存泄露</li>
+</ul>
+<p>这样的情况单单靠引用计数就无法解决了。 也为我们引入了下面的主题<strong>标记清除</strong></p>
+<h3 id="标记清除"><a href="#标记清除" class="headerlink" title="标记清除"></a>标记清除</h3><p>标记清除就是用来解决循环引用的问题的只有容器对象才会出现引用循环，比如列表、字典、类、元组。</p>
+<p>实现：在python底层，维护一个双向链表，专门存放可能存在循环引用的对象，在python内部，<strong>某种情况下</strong>，会去扫描这个链表中的每个元素，检查是否有循环引用，若果有，让双方引用计数器减一</p>
+<p>首先，为了追踪容器对象，需要每个容器对象维护两个额外的指针( <code>_ob_next</code> 和 <code>_ob_prev</code>)，用来将容器对象组成一个链表，指针分别指向前后两个容器对象，方便插入和删除操作</p>
+<p>标记清除算法是一种基于对象可达性分析的回收算法，该算法分为两个步骤，分别是<strong>标记</strong>和<strong>清除</strong>。</p>
+<ul>
+<li>标记阶段，将所有活动对象进行标记</li>
+<li>清除阶段，将所有未进行标记的对象进行回收即可</li>
+</ul>
+<p>那么现在的为问题变为了 GC 是如何判定哪些是活动对象的？</p>
+<p>事实上 GC 会从根结点出发，与根结点直接相连或者间接相连的对象我们将其标记为活动对象（该对象可达[<em>可达性：以某种方式可以访问到</em>]），之后进行回收阶段，将未标记的对象（不可达对象）进行清除。前面所说的根结点可以是全局变量，也可以是调用栈。</p>
+<p>标记清除算法主要用来处理一些容器对象，比如lists, tuples, instances, classes, dictionaries, and functions 类型，因为对于字符串、数值对象是不可能造成循环引用问题，虽说该方法完全可以做到不误杀不遗漏，但 GC 时必须扫描整个堆内存，即使只有少量的非可达对象需要回收也需要扫描全部对象。这是一种巨大的性能浪费</p>
+<p>由于标记清除算法需要扫描整个堆的所有对象导致其性能有所损耗，而且当可以回收的对象越少时性能损耗越高。因此 Python 引入了<strong>分代回收</strong></p>
+<h3 id="分代回收"><a href="#分代回收" class="headerlink" title="分代回收"></a>分代回收</h3><ul>
+<li>分代回收是一种以空间换时间的操作方式，对标记清除中的链表进行优化，Python 将内存根据对象的存活时间划分为不同的集合，每个集合称为一个代，Python 将内存分为了 3“代”，分别为年轻代（第 0 代）、中年代（第 1 代）、老年代（第 2 代），他们对应的是 3 个链表，它们的垃圾收集频率与对象的存活时间的增大而减小。</li>
+<li>新创建的对象都会分配在年轻代，年轻代链表的总数达到上限时，Python 垃圾收集机制就会被触发，把那些可以被回收的对象回收掉，而那些不会回收的对象就会被移到中年代去，依此类推，老年代中的对象是存活时间最久的对象，甚至是存活于整个系统的生命周期内。</li>
+<li>同时，分代回收是建立在标记清除技术基础之上。分代回收同样作为 Python 的辅助垃圾收集技术处理那些容器对象</li>
+</ul>
+<h3 id="何时触发"><a href="#何时触发" class="headerlink" title="何时触发"></a>何时触发</h3><ul>
+<li>被引用为0时，立即回收当前对象</li>
+<li>达到了垃圾回收的阈值，触发标记-清除</li>
+<li>手动调用gc.collect()</li>
+<li>Python虚拟机退出的时候</li>
+</ul>
+<h3 id="参考"><a href="#参考" class="headerlink" title="参考"></a>参考</h3><ul>
+<li><a target="_blank" rel="noopener" href="https://blog.csdn.net/qq_34355232/article/details/113696855">Python垃圾回收机制</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.cnblogs.com/wupeiqi/articles/11507404.html">Python内存管理以及垃圾回收机制</a></li>
+<li><a target="_blank" rel="noopener" href="https://www.bilibili.com/video/BV1bJ411B7cZ">Python内存管理和垃圾回收机制</a></li>
+</ul>
+
+    </div>
+
+    
+    
+    
+        
+
+<div>
+<ul class="post-copyright">
+  <li class="post-copyright-author">
+    <strong>本文作者： </strong>Zero
+  </li>
+  <li class="post-copyright-link">
+    <strong>本文链接：</strong>
+    <a href="http://zero-rock.github.io/2021/0224/fd5dcfad8f4b/" title="Python Garbage Collection">http://zero-rock.github.io/2021/0224/fd5dcfad8f4b/</a>
+  </li>
+  <li class="post-copyright-license">
+    <strong>版权声明： </strong>本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/zh-CN" rel="noopener" target="_blank"><i class="fab fa-fw fa-creative-commons"></i>BY-NC-SA</a> 许可协议。转载请注明出处！
+  </li>
+</ul>
+</div>
+
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/Python/" rel="tag"><i class="fa fa-tag"></i> Python</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2021/0220/38461b4c468e/" rel="prev" title="如何让 useEffect 只在依赖变化的时候执行">
+      <i class="fa fa-chevron-left"></i> 如何让 useEffect 只在依赖变化的时候执行
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2021/0315/eeab895cfbef/" rel="next" title="first head Git">
+      first head Git <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%BC%95%E7%94%A8%E8%AE%A1%E6%95%B0"><span class="nav-number">1.</span> <span class="nav-text">引用计数</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AF%BC%E8%87%B4%E5%BC%95%E7%94%A8%E8%AE%A1%E6%95%B0-1-%E7%9A%84%E6%83%85%E5%86%B5"><span class="nav-number">1.1.</span> <span class="nav-text">导致引用计数 +1 的情况</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%AF%BC%E8%87%B4%E5%BC%95%E7%94%A8%E8%AE%A1%E6%95%B0-1-%E7%9A%84%E6%83%85%E5%86%B5-1"><span class="nav-number">1.2.</span> <span class="nav-text">导致引用计数-1 的情况</span></a></li><li class="nav-item nav-level-4"><a class="nav-link" href="#%E5%BE%AA%E7%8E%AF%E5%BC%95%E7%94%A8%E5%AF%BC%E8%87%B4%E5%86%85%E5%AD%98%E6%B3%84%E9%9C%B2"><span class="nav-number">1.3.</span> <span class="nav-text">循环引用导致内存泄露</span></a></li></ol></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%A0%87%E8%AE%B0%E6%B8%85%E9%99%A4"><span class="nav-number">2.</span> <span class="nav-text">标记清除</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%88%86%E4%BB%A3%E5%9B%9E%E6%94%B6"><span class="nav-number">3.</span> <span class="nav-text">分代回收</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BD%95%E6%97%B6%E8%A7%A6%E5%8F%91"><span class="nav-number">4.</span> <span class="nav-text">何时触发</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%8F%82%E8%80%83"><span class="nav-number">5.</span> <span class="nav-text">参考</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="Zero"
+      src="/images/avatar.jpg">
+  <p class="site-author-name" itemprop="name">Zero</p>
+  <div class="site-description" itemprop="description">IF IT AIN’T BROKE, DON’T FIX IT</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">9</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-categories">
+            <a href="/categories/">
+          
+        <span class="site-state-item-count">2</span>
+        <span class="site-state-item-name">分类</span></a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">7</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/Zero-Rock" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;Zero-Rock" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://weibo.com/knighMobius" title="Weibo → https:&#x2F;&#x2F;weibo.com&#x2F;knighMobius" rel="noopener" target="_blank"><i class="fab fa-weibo fa-fw"></i>Weibo</a>
+      </span>
+      <span class="links-of-author-item">
+        <a href="https://space.bilibili.com/486254298" title="Bilibili → https:&#x2F;&#x2F;space.bilibili.com&#x2F;486254298" rel="noopener" target="_blank"><i class="fab fa-youtube fa-fw"></i>Bilibili</a>
+      </span>
+  </div>
+  <div class="cc-license motion-element" itemprop="license">
+    <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/zh-CN" class="cc-opacity" rel="noopener" target="_blank"><img src="/images/cc-by-nc-sa.svg" alt="Creative Commons"></a>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 2020 – 
+  <span itemprop="copyrightYear">2021</span>
+  <span class="with-love">
+    <i class="fa fa-user"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">Zero</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/lozad@1/dist/lozad.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+</body>
+</html>
